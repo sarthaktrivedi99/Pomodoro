@@ -1,0 +1,122 @@
+services:
+  client:
+    build: ./client
+    container_name: pomodoro-client
+    ports:
+      - "3000:80"
+    depends_on:
+      - server
+    restart: unless-stopped
+    networks:
+      - pomodoro-network
+
+  server:
+    build: ./server
+    container_name: pomodoro-server
+    ports:
+      - "3001:3001"
+    environment:
+      - DATABASE_URL=postgres://postgres:password@postgres:5432/pomodoro?sslmode=disable
+      - JWT_SECRET=change-this-secret-in-production
+      - PORT=3001
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+      - GOOGLE_REDIRECT_URI=http://localhost:3000/api/calendar/callback
+      # Casdoor Configuration
+      - CASDOOR_ENDPOINT=http://pomodoro-casdoor:8000
+      - CASDOOR_CLIENT_ID=e1299d2c7c377d25d92a
+      - CASDOOR_CLIENT_SECRET=cd58dad56fae95955957384d18f8c18a77d1f8c9
+      - CASDOOR_ORG_NAME=pomodoro-org
+      - CASDOOR_APP_NAME=pomodoro-app
+      - CASDOOR_ADMIN_USER=admin
+      - CASDOOR_ADMIN_PASSWORD=123
+    depends_on:
+      - postgres
+    restart: unless-stopped
+    networks:
+      - pomodoro-network
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: pomodoro-db
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: pomodoro
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - pomodoro-network
+    restart: unless-stopped
+
+  mcp-server:
+    build: ./mcp-server
+    container_name: pomodoro-mcp
+    ports:
+      - "3002:3002"
+    env_file:
+      - .env
+    environment:
+      - DB_CONNECTION_STRING=postgres://postgres:password@postgres:5432/pomodoro?sslmode=disable
+      - PORT=3002
+      # Casdoor Config
+      - CASDOOR_ENDPOINT=http://pomodoro-casdoor:8000
+      - CASDOOR_CLIENT_ID=e1299d2c7c377d25d92a
+      - CASDOOR_CLIENT_SECRET=cd58dad56fae95955957384d18f8c18a77d1f8c9
+      - CASDOOR_ORG_NAME=pomodoro-org
+      - CASDOOR_APP_NAME=pomodoro-app
+    depends_on:
+      - postgres
+    restart: unless-stopped
+    networks:
+      - pomodoro-network
+
+  casdoor-db:
+    image: postgres:15-alpine
+    container_name: casdoor-db
+    environment:
+      POSTGRES_DB: casdoor
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: casdoor_password
+    volumes:
+      - casdoor_data:/var/lib/postgresql/data
+    networks:
+      - pomodoro-network
+    restart: unless-stopped
+
+  casdoor:
+    image: casbin/casdoor-all-in-one
+    container_name: pomodoro-casdoor
+    ports:
+      - "8000:8000"
+    environment:
+      driverName: postgres
+      dataSourceName: "user=postgres password=casdoor_password host=casdoor-db port=5432 sslmode=disable dbname=casdoor"
+    depends_on:
+      - casdoor-db
+    networks:
+      - pomodoro-network
+    restart: unless-stopped
+
+  # LLM Service (Ollama) - Commented out, using OpenRouter instead
+  # llm:
+  #   image: ollama/ollama:latest
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama_data:/root/.ollama
+  #   networks:
+  #     - pomodoro-network
+  #   restart: unless-stopped
+
+volumes:
+  postgres_data:
+  casdoor_data:
+  ollama_data:
+
+networks:
+  pomodoro-network:
+    driver: bridge
